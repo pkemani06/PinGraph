@@ -12,9 +12,9 @@ Done when: `docker compose up postgres redis` works and `/health` responds local
 
 ## Phase 1: Data layer (Sat/Sun)
 
-- [ ] `db/schema.sql`: users, boards (user_id FK), pins (title, topic), board_pins (board_id, pin_id, created_at, PK on both, index on pin_id)
-- [ ] `scripts/seed.py`: synthetic data with topic clusters. ~20 topics, ~10k pins each assigned one topic, ~5k boards where ~80% of a board's pins come from one topic, ~200k edges total
-- [ ] `app/db.py`: asyncpg pool, `fetch_all_edges()`, `insert_edge()`, `recent_pins_for_user()`
+- [x] `db/schema.sql`: users, boards (user_id FK), pins (title, topic), board_pins (board_id, pin_id, created_at, PK on both, index on pin_id)
+- [x] `scripts/seed.py`: synthetic data with topic clusters. ~20 topics, ~10k pins each assigned one topic, ~5k boards where ~80% of a board's pins come from one topic, ~200k edges total
+- [x] `app/db.py`: asyncpg pool, `fetch_all_edges()`, `insert_edge()`, `recent_pins_for_user()`
 
 Why topic clusters: they give ground truth. A good recommender should mostly return pins from the query pin's topic, so we can measure quality instead of eyeballing it.
 
@@ -22,14 +22,25 @@ Done when: seed runs in under a minute and row counts match targets.
 
 ## Phase 2: Graph + recommender (Sun/Mon) — I write this part
 
-- [ ] `app/graph.py`: `BipartiteGraph` with `pin_to_boards` and `board_to_pins` (dict of lists), `add_edge()`, `load(edges)`
+- [x] `app/graph.py`: `BipartiteGraph` with `pin_to_boards` and `board_to_pins` (dict of lists), `add_edge()`, `load(edges)`
 - [ ] `app/recommender.py`: `related_pins(graph, pin_id, k, n_steps, restart_prob)`. Walk pin -> random board -> random pin, count visits, restart to the query pin with probability `restart_prob`, exclude the query pin, return top k with scores
 - [ ] `user_feed(graph, recent_pin_ids, k)`: run related_pins per recent pin, sum scores, exclude already-saved pins
 - [ ] Tests on a tiny hand-built graph (shared-board pin ranks first, disconnected pin never appears, pin with no boards returns empty)
-- [ ] `scripts/eval.py`: precision@10 by topic over 500 random pins. Record the number.
+- [ ] `scripts/eval.py`: precision@10 by topic over 500 random pins, for the walk and for the 2-hop baseline on the same pins. Record both numbers and the gap.
 - [ ] Time a single walk. Tune `n_steps` so one call stays in the low milliseconds.
 
-Done when: tests pass and precision@10 is clearly above the random baseline (~5% with 20 topics).
+Done when: tests pass and precision@10 is clearly above the ~66% 2-hop baseline.
+
+Which baseline, and why it is not 5% (measured 2026-10-13 on the seeded graph): returning
+10 pins at random from the whole catalogue scores ~5% (1 topic in 20), but that is an
+algorithm which ignores the graph entirely and nobody would ship it. Returning 10 at
+random from the ~581 pins reachable via pin -> board -> pin already scores 65.9% -- no
+walk, no visit counts, no restart probability -- because boards are 80% single-topic. So
+~66% is the number to beat, and the gap above it is the only part attributable to the
+walk. A walk scoring 70% looks spectacular against 5% while barely beating a one-line
+heuristic. The walk's edge over that baseline comes from multiplicity: a pin reachable
+through several of the ~20 boards a query pin sits on gets visited more often, and visit
+counts are what turn that into a ranking.
 
 ## Phase 3: API (Mon)
 
