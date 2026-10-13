@@ -134,10 +134,13 @@ def build_boards(rng: random.Random) -> tuple[list[tuple[int, int, str]], list[s
     uniform. Uniform-by-construction data can hide bugs that only show up on
     uneven inputs.
 
-    The home topic is deliberately NOT stored in the boards table -- PLAN.md
-    specifies boards as (user_id, title) only, and the recommender must not be
-    able to read a topic label off a board. It is returned here so build_edges
-    can use it, and so the script can report the mix it actually produced.
+    The home topic is deliberately NOT stored in the boards table -- not in a
+    column, and not in the title either. PLAN.md specifies boards as (user_id,
+    title) only, and nothing downstream may read a topic label off a board: the
+    recommender has to recover topical structure from the edges alone, or
+    precision@10 is measuring a shortcut instead of the walk. It is returned
+    here so build_edges can use it, and so the script can report the mix it
+    actually produced.
     """
     rows: list[tuple[int, int, str]] = []
     board_topics: list[str] = [""] * (N_BOARDS + 1)  # index 0 unused
@@ -146,7 +149,7 @@ def build_boards(rng: random.Random) -> tuple[list[tuple[int, int, str]], list[s
         # Boards are handed out in blocks, so each user owns BOARDS_PER_USER.
         user_id = (board_id - 1) // BOARDS_PER_USER + 1
         topic = rng.choice(TOPICS)
-        rows.append((board_id, user_id, f"{topic} board {board_id}"))
+        rows.append((board_id, user_id, f"board {board_id}"))
         board_topics[board_id] = topic
 
     return rows, board_topics
